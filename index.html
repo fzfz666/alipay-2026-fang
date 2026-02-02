@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2026 智能匹配系统 Pro (修复版)</title>
+    <style>
+        :root {
+            --bg: #000000;
+            --panel-bg: #111111;
+            --text-main: #e0e0e0;
+            --accent: #00ff41; /* 严格模式绿 */
+            --free-mode: #00d9ff; /* 自由模式蓝 */
+            --highlight: #ff00de;
+            --danger: #ff3333;
+            --border: #333;
+        }
+
+        body {
+            font-family: 'Consolas', 'Monaco', monospace;
+            background-color: var(--bg);
+            color: var(--text-main);
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            transition: border-color 0.3s;
+        }
+
+        /* --- 顶部设置 --- */
+        header {
+            padding: 10px 20px;
+            background: var(--panel-bg);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            height: 60px;
+        }
+
+        .left-controls {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .config-area {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .config-area input {
+            background: #333;
+            border: 1px solid #555;
+            color: white;
+            font-size: 1.2rem;
+            width: 70px;
+            padding: 2px 5px;
+            text-align: center;
+            font-weight: bold;
+        }
+
+        /* 模式切换开关 */
+        .mode-switch {
+            display: flex;
+            align-items: center;
+            background: #222;
+            border-radius: 20px;
+            padding: 3px;
+            cursor: pointer;
+            border: 1px solid #444;
+            user-select: none;
+        }
+        .mode-option {
+            padding: 5px 15px;
+            border-radius: 15px;
+            font-size: 0.9rem;
+            transition: all 0.3s;
+        }
+        /* 严格模式激活状态 */
+        .mode-switch[data-mode="strict"] .opt-strict {
+            background: var(--accent);
+            color: black;
+            font-weight: bold;
+            box-shadow: 0 0 10px rgba(0, 255, 65, 0.4);
+        }
+        /* 自由模式激活状态 */
+        .mode-switch[data-mode="free"] .opt-free {
+            background: var(--free-mode);
+            color: black;
+            font-weight: bold;
+            box-shadow: 0 0 10px rgba(0, 217, 255, 0.4);
+        }
+
+        /* --- 核心大屏区 --- */
+        #dashboard {
+            height: 30vh;
+            display: flex;
+            border-bottom: 1px solid var(--border);
+            background: #050505;
+        }
+
+        .dash-panel {
+            flex: 1;
+            padding: 10px;
+            overflow-y: auto;
+        }
+        
+        #match-box { border-right: 1px solid var(--border); }
+        
+        .match-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-left: 3px solid #888;
+            padding: 8px;
+            margin-bottom: 5px;
+            font-size: 1.1rem;
+            animation: slideIn 0.3s ease;
+        }
+        /* 动态改变匹配结果颜色 */
+        body.mode-strict .match-card { border-color: var(--accent); background: rgba(0, 255, 65, 0.08); }
+        body.mode-free .match-card { border-color: var(--free-mode); background: rgba(0, 217, 255, 0.08); }
+
+        .need-tag {
+            display: inline-block;
+            background: var(--highlight);
+            color: white;
+            padding: 4px 10px;
+            margin: 4px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+
+        /* --- 底部操作区 --- */
+        #workspace {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            height: 70vh;
+        }
+
+        #input-container {
+            padding: 15px;
+            background: var(--panel-bg);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 120px;
+        }
+        
+        #master-input {
+            width: 90%;
+            height: 80px;
+            font-size: 1.2rem;
+            background: #000;
+            border: 2px solid #555;
+            color: white;
+            padding: 10px;
+            font-family: monospace;
+            resize: none;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+        
+        /* 聚焦时的边框颜色跟随模式 */
+        body.mode-strict #master-input:focus { border-color: var(--accent); box-shadow: 0 0 15px rgba(0, 255, 65, 0.2); }
+        body.mode-free #master-input:focus { border-color: var(--free-mode); box-shadow: 0 0 15px rgba(0, 217, 255, 0.2); }
+
+        .hint { color: #666; font-size: 0.9rem; margin-top: 5px; }
+
+        #data-lists {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+            background: #0a0a0a;
+        }
+        
+        .list-col {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid var(--border);
+        }
+        .list-col:last-child { border: none; }
+
+        .col-title {
+            padding: 8px;
+            text-align: center;
+            font-weight: bold;
+            background: #1a1a1a;
+            border-bottom: 1px solid #333;
+            color: #aaa;
+            transition: color 0.3s;
+        }
+        
+        /* 标题颜色跟随模式 */
+        body.mode-strict .col-strict { color: var(--accent); }
+        body.mode-free .col-free { color: var(--free-mode); }
+
+        .scroll-area { flex: 1; overflow-y: auto; }
+
+        .data-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 15px;
+            border-bottom: 1px solid #1f1f1f;
+            color: #ccc;
+            font-size: 1.1rem;
+        }
+        /* 标记被忽略的数字（灰色） */
+        .data-item.ignored { color: #444; text-decoration: line-through; }
+        
+        .del-btn {
+            color: #666; cursor: pointer; font-weight: bold; padding: 0 5px;
+        }
+        .del-btn:hover { color: var(--danger); transform: scale(1.2); }
+
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #111; }
+        ::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
+    </style>
+</head>
+<body class="mode-strict"> <!-- 默认严格模式 -->
+
+    <header>
+        <div class="left-controls">
+            <!-- 模式切换开关 -->
+            <div class="mode-switch" id="mode-switch" data-mode="strict" onclick="toggleMode()">
+                <div class="mode-option opt-strict">🔒 严格模式</div>
+                <div class="mode-option opt-free">🔓 自由模式</div>
+            </div>
+            
+            <div class="config-area">
+                <span>固定:</span>
+                <input type="number" id="fixed-num" value="691">
+            </div>
+        </div>
+
+        <div style="font-size: 1.2rem; font-weight: bold;">
+            目标: <span id="target-display" style="color:var(--accent)">2026</span>
+            <span id="save-status" style="font-size:0.8rem; color:#666; margin-left:10px; font-weight:normal"></span>
+        </div>
+    </header>
+
+    <div id="dashboard">
+        <div id="match-box" class="dash-panel">
+            <div style="color:#666; font-size:0.9rem; margin-bottom:5px;">MATCHED SUCCESS</div>
+            <div id="match-list"></div>
+        </div>
+        <div id="predict-box" class="dash-panel">
+            <div style="color:#666; font-size:0.9rem; margin-bottom:5px;">URGENT NEED (还差多少)</div>
+            <div id="need-list"></div>
+        </div>
+    </div>
+
+    <div id="workspace">
+        <div id="input-container">
+            <textarea id="master-input" placeholder="粘贴数字... 支持批量 (如: 100 200 888)"></textarea>
+            <div class="hint" id="status-msg"></div>
+        </div>
+
+        <div id="data-lists">
+            <!-- 左栏 -->
+            <div class="list-col">
+                <div class="col-title" id="title-left">
+                    左池 <span id="label-left"></span> <span id="count-small"></span>
+                </div>
+                <div class="scroll-area" id="small-list-dom"></div>
+            </div>
+            <!-- 右栏 -->
+            <div class="list-col">
+                <div class="col-title" id="title-right">
+                    右池 <span id="label-right"></span> <span id="count-big"></span>
+                </div>
+                <div class="scroll-area" id="big-list-dom"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 全局状态 ---
+        let state = {
+            mode: 'strict', // 'strict' 或 'free'
+            fixed: 691,
+            small: [], // 左池
+            big: []    // 右池
+        };
+
+        const TARGET_TOTAL = 2026;
+        const STRICT_BIG_MIN = 800;
+        const FREE_SPLIT_THRESHOLD = 800; 
+
+        // DOM 引用
+        const body = document.body;
+        const modeSwitch = document.getElementById('mode-switch');
+        const fixedInput = document.getElementById('fixed-num');
+        const masterInput = document.getElementById('master-input');
+        const statusMsg = document.getElementById('status-msg');
+        
+        const labelLeft = document.getElementById('label-left');
+        const labelRight = document.getElementById('label-right');
+        const titleLeft = document.getElementById('title-left');
+        const titleRight = document.getElementById('title-right');
+        const targetDisplay = document.getElementById('target-display');
+
+        const matchListDom = document.getElementById('match-list');
+        const needListDom = document.getElementById('need-list');
+        const smallListDom = document.getElementById('small-list-dom');
+        const bigListDom = document.getElementById('big-list-dom');
+        const countSmall = document.getElementById('count-small');
+        const countBig = document.getElementById('count-big');
+
+        // --- 核心修复：添加动态计算小号上限的函数 ---
+        function getStrictSmallLimit() {
+            return TARGET_TOTAL - state.fixed - STRICT_BIG_MIN;
+        }
+
+        init();
+
+        async function init() {
+            masterInput.focus();
+            await loadFromServer();
+            // 先加载数据，再计算一次上限，再刷新UI
+            recalcLogic(); 
+            updateUIByMode();
+
+            fixedInput.addEventListener('input', (e) => {
+                const val = parseInt(e.target.value);
+                if (!isNaN(val)) {
+                    state.fixed = val;
+                    // 数字变了，小号上限也变了，所以要刷新 UI 文字
+                    updateUIByMode();
+                    saveAndCalc();
+                }
+            });
+
+            masterInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    processInput();
+                }
+            });
+        }
+
+        // --- 切换模式 ---
+        window.toggleMode = function() {
+            state.mode = (state.mode === 'strict') ? 'free' : 'strict';
+            updateUIByMode();
+            saveAndCalc();
+        };
+
+        function updateUIByMode() {
+            // 更新 Class 以改变颜色
+            body.className = `mode-${state.mode}`;
+            modeSwitch.setAttribute('data-mode', state.mode);
+            targetDisplay.style.color = state.mode === 'strict' ? 'var(--accent)' : 'var(--free-mode)';
+
+            // 更新标题文字
+            if (state.mode === 'strict') {
+                const limit = getStrictSmallLimit(); // 动态获取
+                labelLeft.textContent = `(≤ ${limit})`;
+                labelRight.textContent = `(≥ ${STRICT_BIG_MIN})`;
+                statusMsg.textContent = `🔒 严格模式：只接受 ≤${limit} 和 ≥${STRICT_BIG_MIN} 的数字`;
+                titleLeft.className = "col-title col-strict";
+                titleRight.className = "col-title col-strict";
+            } else {
+                labelLeft.textContent = `(< ${FREE_SPLIT_THRESHOLD})`;
+                labelRight.textContent = `(≥ ${FREE_SPLIT_THRESHOLD})`;
+                statusMsg.textContent = `🔓 自由模式：接受所有数字，任意组合`;
+                titleLeft.className = "col-title col-free";
+                titleRight.className = "col-title col-free";
+            }
+        }
+
+        // --- 核心输入逻辑 ---
+        function processInput() {
+            const rawText = masterInput.value;
+            if (!rawText.trim()) return;
+
+            const tokens = rawText.split(/[^0-9-]+/).filter(t => t.trim() !== '');
+            let added = 0;
+            let ignored = 0;
+            const smallLimit = getStrictSmallLimit(); // 获取当前限制
+
+            tokens.forEach(token => {
+                const val = parseInt(token);
+                if (isNaN(val)) return;
+
+                if (state.mode === 'strict') {
+                    // 严格模式：必须符合区间
+                    if (val <= smallLimit) { 
+                        state.small.unshift(val);
+                        added++;
+                    } else if (val >= STRICT_BIG_MIN) {
+                        state.big.unshift(val);
+                        added++;
+                    } else {
+                        ignored++;
+                    }
+                } else {
+                    // 自由模式：通吃
+                    if (val < FREE_SPLIT_THRESHOLD) {
+                        state.small.unshift(val);
+                    } else {
+                        state.big.unshift(val);
+                    }
+                    added++;
+                }
+            });
+
+            masterInput.value = '';
+            
+            if (state.mode === 'strict') {
+                statusMsg.textContent = `✅ 新增 ${added} 个` + (ignored > 0 ? ` (已过滤 ${ignored} 个不合规数字)` : '');
+            } else {
+                statusMsg.textContent = `✅ 新增 ${added} 个数字 (自由模式)`;
+            }
+
+            renderAllLists();
+            saveAndCalc();
+        }
+
+        // --- 核心计算逻辑 ---
+        function recalcLogic() {
+            const pairTarget = TARGET_TOTAL - state.fixed;
+            let matches = [];
+            let neededMap = new Map();
+            const strictSmallMax = getStrictSmallLimit(); // 获取当前动态上限
+
+            let pool = [];
+            state.small.forEach(n => {
+                // 严格模式下，利用动态上限判断是否有效
+                if (state.mode === 'strict' && n > strictSmallMax) return;
+                pool.push({ val: n, type: 'small' });
+            });
+            state.big.forEach(n => {
+                if (state.mode === 'strict' && n < STRICT_BIG_MIN) return;
+                pool.push({ val: n, type: 'big' });
+            });
+
+            if (state.mode === 'strict') {
+                // 🔒 严格模式算法
+                let bigCounts = {};
+                pool.filter(x => x.type === 'big').forEach(x => {
+                    bigCounts[x.val] = (bigCounts[x.val] || 0) + 1;
+                });
+
+                pool.filter(x => x.type === 'small').forEach(x => {
+                    const need = pairTarget - x.val;
+                    if (need >= STRICT_BIG_MIN) {
+                        if (bigCounts[need] > 0) {
+                            matches.push(`${state.fixed} + ${x.val} + ${need}`);
+                        } else {
+                            neededMap.set(need, (neededMap.get(need) || 0) + 1);
+                        }
+                    }
+                });
+
+            } else {
+                // 🔓 自由模式算法
+                let numCounts = {};
+                pool.forEach(x => numCounts[x.val] = (numCounts[x.val] || 0) + 1);
+                let processed = new Set();
+
+                pool.forEach(x => {
+                    const val = x.val;
+                    if (processed.has(val)) return; 
+                    const need = pairTarget - val;
+                    
+                    if (numCounts[need]) {
+                        if (need === val && numCounts[val] < 2) {
+                            neededMap.set(need, (neededMap.get(need) || 0) + 1);
+                        } else {
+                            if (!processed.has(need)) {
+                                matches.push(`${state.fixed} + ${val} + ${need}`);
+                            }
+                        }
+                    } else {
+                        neededMap.set(need, (neededMap.get(need) || 0) + 1);
+                    }
+                    processed.add(val);
+                });
+            }
+
+            renderMatchList(matches);
+            renderNeedList(neededMap);
+        }
+
+        function renderMatchList(matches) {
+            if (matches.length === 0) {
+                matchListDom.innerHTML = '<div style="color:#444; padding:10px;">等待匹配...</div>';
+            } else {
+                matchListDom.innerHTML = matches.map(m => `
+                    <div class="match-card">🎉 <b>${m} = ${TARGET_TOTAL}</b></div>
+                `).join('');
+            }
+        }
+
+        function renderNeedList(map) {
+            const list = Array.from(map.entries()).sort((a, b) => a[0] - b[0]);
+            if (list.length === 0) {
+                needListDom.innerHTML = '<div style="color:#444; padding:10px;">暂无推荐</div>';
+            } else {
+                needListDom.innerHTML = list.map(item => {
+                    const tag = item[1] > 1 ? `x${item[1]}` : '';
+                    return `<div class="need-tag">需 ${item[0]} <small>${tag}</small></div>`;
+                }).join('');
+            }
+        }
+
+        function renderAllLists() {
+            renderList(smallListDom, state.small, 'small');
+            renderList(bigListDom, state.big, 'big');
+            countSmall.innerText = `(${state.small.length})`;
+            countBig.innerText = `(${state.big.length})`;
+        }
+
+        function renderList(container, dataArray, type) {
+            const strictSmallMax = getStrictSmallLimit(); // 获取当前动态上限
+            
+            container.innerHTML = dataArray.map((num, index) => {
+                let isInvalid = false;
+                if (state.mode === 'strict') {
+                    // 使用动态上限判断
+                    if (type === 'small' && num > strictSmallMax) isInvalid = true;
+                    if (type === 'big' && num < STRICT_BIG_MIN) isInvalid = true;
+                }
+                
+                const cls = isInvalid ? 'data-item ignored' : 'data-item';
+                
+                return `
+                <div class="${cls}">
+                    <span>${num}</span>
+                    <span class="del-btn" onclick="removeNumber('${type}', ${index})">✕</span>
+                </div>
+            `}).join('');
+        }
+
+        window.removeNumber = function(type, index) {
+            if (type === 'small') state.small.splice(index, 1);
+            else state.big.splice(index, 1);
+            renderAllLists();
+            saveAndCalc();
+            masterInput.focus();
+        };
+
+        async function saveAndCalc() {
+            recalcLogic();
+            renderAllLists(); 
+            try {
+                await fetch('/api/save', {
+                    method: 'POST',
+                    body: JSON.stringify(state)
+                });
+                document.getElementById('save-status').textContent = "已保存";
+            } catch (e) {}
+        }
+
+        async function loadFromServer() {
+            try {
+                const res = await fetch('/api/data');
+                const data = await res.json();
+                if (data) {
+                    state = data;
+                    if(!state.mode) state.mode = 'strict';
+                    if(!state.small) state.small = [];
+                    if(!state.big) state.big = [];
+                    fixedInput.value = state.fixed || 691;
+                    // 加载完数据后，重新计算并刷新UI
+                    recalcLogic();
+                    renderAllLists();
+                    updateUIByMode(); 
+                }
+            } catch (e) {}
+        }
+    </script>
+</body>
+</html>
